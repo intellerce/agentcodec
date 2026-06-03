@@ -1,0 +1,41 @@
+# Library deployment config — ROUTED strategy with a hand-coded ACM table.
+# -------------------------------------------------------------------------
+# Pre-deep-learning routing: a hand-coded difficulty-bin table dispatches
+# easy tasks to a cheap technique and hard tasks to a redundant pipeline.
+# Difficulty is estimated by a pilot probe (1 short generation).
+#
+# Use this when you don't have a SemKNN backend yet but still want
+# per-prompt routing.
+
+models:
+  - model: "qwen2.5:7b"
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"
+    cost_per_1m: { input: 0.10, output: 0.10 }
+  - model: "llama3.1:8b"
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"
+    cost_per_1m: { input: 0.10, output: 0.10 }
+
+judge:
+  model: "gemma3:12b"
+  base_url: "http://localhost:11434/v1"
+  api_key: "ollama"
+  cost_per_1m: { input: 0.15, output: 0.15 }
+
+critic:
+  same: true
+
+strategy:
+  type: "routed"
+  router:
+    type: "acm_table"
+    table:
+      - { name: "easy",     difficulty_range: [0.00, 0.30], technique: "harq_ir",       max_rounds: 2 }
+      - { name: "moderate", difficulty_range: [0.30, 0.60], technique: "harq_ir",       max_rounds: 3 }
+      - { name: "hard",     difficulty_range: [0.60, 0.85], technique: "turbo",         max_rounds: 4 }
+      - { name: "extreme",  difficulty_range: [0.85, 1.00], technique: "diversity_mrc", num_branches: 2 }
+
+defaults:
+  category: "auto"
+  on_error: "fallback_baseline"

@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "_doc": "Canonical model-family map. Used by RemoteSemKNNRouter to derive a user_config fingerprint to send to the SemKNN backend; the backend ships an identical copy and canonicalizes its own profiles the same way. Patterns are lowercased substrings; first family whose any-pattern matches the lowercased model string wins. Unknown models pass through unchanged. Edit liberally to map a private fine-tune to the closest public family — fine-tune of llama-3.2-70b would typically be mapped to 'llama-3' for routing purposes. NOTE: 'rough_params' below is a coarse, FAMILY-level hint only and is NOT the conditioning signal for matching — the real per-channel size lives in user_config.channel_specs[].params_b, parsed per-instance from the concrete model id (':30b', '8x7b', ...) by parse_params_b(). Size materially affects q-matrix calibration, so the backend should match on channel_specs (family + params_b [+ quant]), not on family alone. The judge model is NOT part of the fingerprint (channels only).",
+  "families": {
+    "nemotron": {
+      "patterns": ["nemotron"],
+      "rough_params": "70B"
+    },
+    "devstral": {
+      "patterns": ["devstral"],
+      "rough_params": "22B"
+    },
+    "glm-5.1": {
+      "patterns": ["glm-5.1", "glm5.1", "glm:5.1"],
+      "rough_params": "32B"
+    },
+    "glm-4.5": {
+      "patterns": ["glm-4.5", "glm4.5", "glm:4.5"],
+      "rough_params": "32B"
+    },
+    "qwen-3": {
+      "patterns": ["qwen3", "qwen-3", "qwen:3"],
+      "rough_params": "varies"
+    },
+    "qwen-2.5": {
+      "patterns": ["qwen2.5", "qwen-2.5", "qwen:2.5"],
+      "rough_params": "varies"
+    },
+    "llama-3": {
+      "patterns": ["llama-3", "llama3", "llama_3", "meta-llama/meta-llama-3", "meta-llama/llama-3"],
+      "rough_params": "varies"
+    },
+    "gemma-3": {
+      "patterns": ["gemma-3", "gemma3", "gemma:3"],
+      "rough_params": "varies"
+    },
+    "gemma-2": {
+      "patterns": ["gemma-2", "gemma2", "gemma:2"],
+      "rough_params": "varies"
+    },
+    "phi-3": {
+      "patterns": ["phi-3", "phi3", "phi:3"],
+      "rough_params": "varies"
+    },
+    "deepseek-r1": {
+      "patterns": ["deepseek-r1", "deepseek_r1"],
+      "rough_params": "varies"
+    },
+    "deepseek": {
+      "patterns": ["deepseek"],
+      "rough_params": "varies"
+    },
+    "claude-haiku": {
+      "patterns": ["claude-haiku", "claude-3-haiku", "claude-3-5-haiku", "claude-haiku-3", "claude-haiku-4"],
+      "rough_params": "n/a"
+    },
+    "claude-sonnet": {
+      "patterns": ["claude-sonnet", "claude-3-sonnet", "claude-3-5-sonnet", "claude-3-7-sonnet", "claude-sonnet-4"],
+      "rough_params": "n/a"
+    },
+    "claude-opus": {
+      "patterns": ["claude-opus", "claude-3-opus", "claude-opus-4"],
+      "rough_params": "n/a"
+    },
+    "gpt-4o-mini": {
+      "patterns": ["gpt-4o-mini"],
+      "rough_params": "n/a"
+    },
+    "gpt-4o": {
+      "patterns": ["gpt-4o", "gpt4o"],
+      "rough_params": "n/a"
+    },
+    "gpt-4-turbo": {
+      "patterns": ["gpt-4-turbo", "gpt-4-1106", "gpt-4-0125"],
+      "rough_params": "n/a"
+    },
+    "o1": {
+      "patterns": ["o1-preview", "o1-mini", "o1-"],
+      "rough_params": "n/a"
+    }
+  }
+}

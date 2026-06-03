@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+title: "AgentCodec: A Communication-Theoretic Framework for LLM Agents"
+message: >-
+  If you use AgentCodec in academic work, please cite this software
+  and the accompanying paper.
+type: software
+authors:
+  - given-names: Hamed
+    family-names: Omidvar
+    affiliation: INTELLERCE LLC
+    email: research@intellerce.com
+  - given-names: Vahideh
+    family-names: Akhlaghi
+    affiliation: INTELLERCE LLC
+    email: research@intellerce.com
+abstract: >-
+  AgentCodec wraps every LLM call in a technique drawn from classical
+  communication theory: HARQ for iterative refinement, diversity
+  combining for ensembles, FEC for redundancy under budget pressure,
+  ACM routing for adaptive coding/modulation. 29 dispatchable
+  techniques in six families, plus 7 prior-method baselines. The
+  SemKNN cost-aware router achieves up to ~56% cost reduction at
+  matched quality, or ~7% quality improvement at matched cost, vs.
+  prior baselines.
+license: PolyForm-Noncommercial-1.0.0
+repository-code: "https://github.com/intellerce/agentcodec"
+url: "https://github.com/intellerce/agentcodec"
+keywords:
+  - llm
+  - agents
+  - reliability
+  - communication-theory
+  - harq
+  - diversity-combining
+  - semknn
+  - cost-aware-routing
+preferred-citation:
+  type: article
+  title: >-
+    A Communication-Theoretic Framework for LLM Agents:
+    Cost-Aware Adaptive Reliability
+  authors:
+    - given-names: Hamed
+      family-names: Omidvar
+    - given-names: Vahideh
+      family-names: Akhlaghi
+  year: 2026
+  notes: Working paper. INTELLERCE LLC.

@@ -1,0 +1,262 @@
+# =============================================================================
+# AgentCodec — comprehensive library configuration example
+# =============================================================================
+# This file documents every public knob of the library deployment config
+# (the LibraryConfig schema consumed by ReliabilityModule.from_yaml). It is
+# deliberately verbose so you can fork it as a starting point and remove the
+# blocks you don't need.
+#
+# Schema reference:  agentcodec/config.py  (LibraryConfig, ModelConfig, …)
+# Loader:            agentcodec.ReliabilityModule.from_yaml("this_file.yaml")
+# Companion script:  examples/08_from_yaml.py
+#
+# The defaults below target a local Ollama instance (matches the rest of the
+# examples). Replace base_url / api_key / model names to switch providers —
+# all OpenAI-compatible endpoints (OpenAI, Together, OpenRouter, LM Studio,
+# vLLM, Anthropic via its native SDK auto-detect) are supported.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# models — the LLM channels available for generation.
+# -----------------------------------------------------------------------------
+# At least one is required. Adding a second model from a *different* family
+# unlocks spatial diversity (diversity_mrc / diversity_sc / diversity_egc):
+# uncorrelated failure modes between families is what diversity exploits.
+#
+# Provider routing rules:
+#   - Models starting with "claude-" use the native Anthropic SDK (needs
+#     ANTHROPIC_API_KEY). The base_url field is ignored for those.
+#   - Everything else hits the OpenAI-compatible client at base_url with
+#     api_key as the bearer token.
+# -----------------------------------------------------------------------------
+models:
+  - model: "qwen3:8b"                       # Ollama tag
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"                         # any non-empty string for Ollama
+    temperature: 0.7                          # base temperature
+    max_tokens: 32768                         # cap on generation length
+
+    # extra_body is passed through to the OpenAI-compatible POST body.
+    # Useful for backend-specific knobs (Ollama's chat_template_kwargs,
+    # vLLM's guided_decoding, OpenRouter's provider preference, etc.).
+    # extra_body:
+    #   chat_template_kwargs: { enable_thinking: false }   # Ollama qwen3 / deepseek-r1
+
+    # Per-task-category temperature overrides. The runner swaps in the
+    # category value before each call and restores the base afterwards.
+    # Categories without a key here keep the base `temperature`.
+    # category_temperatures:
+    #   qa:         0.2     # deterministic — correctness > variety
+    #   reasoning:  0.4     # some exploration without losing the chain
+    #   creative:   0.8
+    #   code:       0.2
+
+    # Per-million-token rates. Set both to make cost accounting exact;
+    # leave unset and the library will (1) consult OpenRouter's live
+    # catalog with a 7-day cache, (2) fall back to the MODEL_COSTS table,
+    # (3) infer from the parameter count in the name, (4) use $2/$8.
+    # The cost_source field on every ReliabilityResult reports which tier
+    # was used so reviewers can audit pricing claims.
+    cost_per_1m: { input: 0.10, output: 0.10 }
+
+    # Thinking / reasoning-mode control. Accepts:
+    #   - omit / null   → library decides (off for non-reasoning models)
+    #   - true / false  → force on/off, no budget
+    #   - "auto"        → on iff model is reasoning-capable
+    #   - dict          → explicit enabled + token budget (preferred)
+    # thinking:
+    #   enabled: true
+    #   budget_tokens: 4096
+
+  - model: "llama3.1:8b"                      # second family → spatial diversity
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"
+    temperature: 0.7
+    cost_per_1m: { input: 0.10, output: 0.10 }
+
+
+# -----------------------------------------------------------------------------
+# judge — the LLM that scores candidate answers on [0, 1].
+# -----------------------------------------------------------------------------
+# Should be at least as strong as the generators, ideally stronger or from a
+# different family (uncorrelated bias). Used by:
+#   - diversity_mrc / diversity_sc / diversity_egc (weighting + synthesis)
+#   - harq_ir / harq_cc / turbo                    (quality threshold checks)
+#   - self_refine                                  (per-round score)
+#   - every benchmark accuracy number
+# -----------------------------------------------------------------------------
+judge:
+  model: "gemma3:12b"
+  base_url: "http://localhost:11434/v1"
+  api_key: "ollama"
+  cost_per_1m: { input: 0.15, output: 0.15 }
+
+  # extra_body / thinking work here too — useful for forcing a thinking judge
+  # off on Ollama qwen3-style models to keep judge calls cheap.
+  # extra_body:
+  #   chat_template_kwargs: { enable_thinking: false }
+
+
+# -----------------------------------------------------------------------------
+# critic — the LLM that proposes structured fixes between rounds.
+# -----------------------------------------------------------------------------
+# Used by harq_ir (incremental redundancy) and turbo. NOT used by the
+# baselines or diversity techniques.
+#
+# Two modes:
+#   `same: true`   → reuse the primary channel (recommended for HARQ-IR:
+#                    the critic should reason "in the generator's voice").
+#   `same: false` + `model: ...` → dedicated critic. Pick a stronger model
+#                    if your generator routinely defends its own mistakes.
+# -----------------------------------------------------------------------------
+critic:
+  same: true
+
+  # Dedicated critic (alternative form):
+  # same: false
+  # model: "qwen3:14b"
+  # base_url: "http://localhost:11434/v1"
+  # api_key:  "ollama"
+  # cost_per_1m: { input: 0.20, output: 0.20 }
+  # thinking: { enabled: true, budget_tokens: 4096 }
+
+
+# -----------------------------------------------------------------------------
+# strategy — what runs per .run() call.
+# -----------------------------------------------------------------------------
+# Two top-level shapes:
+#
+#   type: fixed   → always run the same technique with the same params.
+#                   Simplest. Pick this until you have a reason not to.
+#   type: routed  → consult a router (acm_table / acm_linear / semknn) to
+#                   pick a technique per prompt. Trades a small routing
+#                   cost for cost/quality wins on hard prompts.
+#
+# Every technique name from KNOWN_TECHNIQUES in agentcodec/dispatch.py is
+# valid here. Cheat-sheet of the most commonly used ones:
+#
+#   baseline               — single call, no reliability. Reference point.
+#   self_refine            — draft / critique / revise loop (1 model).
+#   self_consistency       — N samples, majority vote. (Wang et al. 2022)
+#   chain_of_verification  — generate verification Qs, answer them, revise.
+#   best_of_n              — N samples, judge picks the best.
+#   diversity_sc           — N models in parallel, judge picks best (selection).
+#   diversity_mrc          — N models in parallel, quality-weighted blend.
+#   diversity_egc          — N models in parallel, unweighted average.
+#   harq_cc / harq_ir      — iterative ARQ. _ir adds critic deltas each round.
+#   turbo                  — generator/critic loop with mutual refinement.
+#   fountain / fountain_soft — rateless coding: keep sampling until done.
+#   fec_0.75 / fec_0.50 / fec_0.33 — forward error correction at code rate r.
+#   acm / acm_soft / acm_learned   — adaptive coding-modulation routing.
+# -----------------------------------------------------------------------------
+strategy:
+  # ---- FIXED shape (the default in this file) ----
+  type: "fixed"
+  technique: "harq_ir"
+  params:
+    max_rounds: 4              # cap iterations (default 5)
+    # quality_threshold: 0.85  # early-exit threshold (default 0.85)
+
+  # ---- ROUTED shape (uncomment instead of `type: fixed` above) ----
+  # type: "routed"
+  # router:
+  #   # Option A: acm_table — hand-coded difficulty bins, no training.
+  #   type: "acm_table"
+  #   table:
+  #     - { name: "easy",     difficulty_range: [0.00, 0.30], technique: "baseline" }
+  #     - { name: "moderate", difficulty_range: [0.30, 0.60], technique: "harq_ir", max_rounds: 2 }
+  #     - { name: "hard",     difficulty_range: [0.60, 0.85], technique: "harq_ir", max_rounds: 4 }
+  #     - { name: "extreme",  difficulty_range: [0.85, 1.00], technique: "diversity_mrc", num_branches: 2 }
+  #
+  #   # Option B: acm_linear — trained linear router (needs a cache JSON).
+  #   # type: "acm_linear"
+  #   # cache: "weights/linear.json"
+  #
+  #   # Option C: semknn — remote service. Sends only an embedding (no prompt).
+  #   # type: "semknn"
+  #   # server_url: "https://semknn.example.com"
+  #   # lambda: 0.5                       # cost/quality trade-off
+  #   # api_key: null                     # falls back to AGENTCODEC_API_KEY
+  #   # timeout_s: 10
+  #   # fallback: "linear"                # if backend down, degrade gracefully
+  #   # fallback_cache: "weights/linear.json"
+  #
+  # # Per-technique knob overrides applied whenever that technique is chosen.
+  # dispatch:
+  #   harq_ir:        { max_rounds: 4 }
+  #   diversity_mrc:  { num_branches: 2 }
+  #   turbo:          { max_iterations: 4 }
+
+
+# -----------------------------------------------------------------------------
+# defaults — runtime behavior knobs.
+# -----------------------------------------------------------------------------
+defaults:
+  # Category controls per-category prompt formatting + (optionally) temperature.
+  # "auto" classifies cheaply from the prompt; pass an explicit category at
+  # mod.run(prompt, category=...) to override per-call.
+  category: "auto"             # auto | qa | reasoning | creative | code
+
+  # What to do when a technique raises:
+  #   raise              — propagate the exception (recommended on cloud APIs)
+  #   fallback_baseline  — log + retry the prompt with `baseline`
+  on_error: "fallback_baseline"
+
+  # Global per-task ceiling in seconds. Only enforced in sequential mode
+  # (parallel runs use the channel's HTTP timeouts instead).
+  task_timeout_s: 300
+
+  # Allow iterative techniques (harq_ir, turbo, self_refine) to stop the
+  # moment quality_threshold is met instead of running to max_rounds.
+  early_exit: true
+
+  # Soft-method aggregation (CISC §3 + App C). Only consumed by the techniques
+  # that combine probability/judge-score weights: diversity_mrc_soft,
+  # diversity_mrc_discrete_N, diversity_mrc_discrete_N_soft, fountain.
+  soft_normalization:
+    enabled: true
+    T_logprob:    0.1          # CISC Fig 8 median for Response Probability
+    T_judge:      0.5          # heuristic; not calibrated by the paper
+    T_verbal_100: 8.0          # CISC Fig 8 median for Verbal 0-100
+
+  # CISC baseline knobs. Only used when strategy/technique == "cisc".
+  cisc:
+    csi_source: "verbal_100"   # "verbal_100" (works everywhere) or
+                               # "response_probability" (needs logprob exposure)
+    softmax_temperature: null  # null → use the source's calibrated default
+    num_samples: 5
+
+  # Streaming defaults for mod.stream() / mod.astream().
+  streaming:
+    events:  "all"             # "all" | "tokens" | "progress"
+    chunk_format: "delta"      # "delta" | "cumulative"
+    emit_thinking_tokens: false
+
+
+# -----------------------------------------------------------------------------
+# cost_overrides — global price-table overrides, keyed by model name.
+# -----------------------------------------------------------------------------
+# Useful when many channels share a custom rate (e.g. enterprise discounts).
+# Per-model `cost_per_1m` always wins; this is a fallback for models without it.
+# -----------------------------------------------------------------------------
+# cost_overrides:
+#   "gpt-4o-mini":     { input: 0.10, output: 0.40 }
+#   "claude-haiku-4-5": { input: 0.60, output: 3.00 }
+
+
+# -----------------------------------------------------------------------------
+# telemetry — anonymous usage events.
+# -----------------------------------------------------------------------------
+# Master kill switch is the env var AGENTCODEC_TELEMETRY=0. This block is for
+# per-deployment overrides only. Telemetry is automatically disabled when no
+# endpoint is configured AND the router is not the remote SemKNN service.
+# -----------------------------------------------------------------------------
+telemetry:
+  enabled: true                # ignored if AGENTCODEC_TELEMETRY=0
+  endpoint: null               # null → SemKNN router URL + /telemetry, or off
+  quiet_notice: false          # true silences the first-run notice
+  flush_interval_s: 30
+  queue_max: 1000
+  batch_max: 32
+  timeout_s: 5

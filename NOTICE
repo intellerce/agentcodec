@@ -1,0 +1,133 @@
+AgentCodec — communication-theoretic reliability for LLM agents
+================================================================
+
+Required Notice: Copyright (c) 2026 The AgentCodec Authors.
+
+This software is licensed under the PolyForm Noncommercial License 1.0.0.
+See the LICENSE file in this directory, or visit
+https://polyformproject.org/licenses/noncommercial/1.0.0/ for the full text.
+
+You may use, study, modify, and redistribute this software for any
+noncommercial purpose — research, teaching, personal experimentation,
+internal evaluation at a non-profit or educational institution, and similar
+uses are all explicitly permitted.
+
+Commercial use — including but not limited to selling the software,
+offering it as a hosted service for a fee, or using it inside a product or
+internal pipeline that supports a commercial business — requires a separate
+license from the authors. See COMMERCIAL.md.
+
+
+Method, data, and hosted service
+--------------------------------
+
+The "SemKNN" cost-aware routing method described in the accompanying paper
+is the subject of ongoing research. The trained SemKNN artifacts and the
+benchmark datasets they were produced from are NOT distributed with this
+release. The public package contacts a small backend service to obtain
+SemKNN recommendations; the backend never receives the user's prompt, only
+a unit-norm embedding vector and a scalar lambda value. See the README
+section on "Privacy & data flow" for the full description.
+
+Users who would like to run the SemKNN router fully on-premise (for
+regulated environments or air-gapped deployments) may license the backend
+image and the trained artifacts under separate commercial terms; contact
+the authors.
+
+
+Anonymous usage telemetry
+-------------------------
+
+AgentCodec sends anonymous usage telemetry by default — but only when
+you're using SemKNN routing. The payload covers technique chosen,
+latency, predicted vs. observed quality, token counts, the prompt
+embedding (already sent for SemKNN routing), and a canonical
+model-family fingerprint. It does NOT include prompts, model outputs,
+reference answers, concrete model names, API keys, or any user
+identifier. A per-process ephemeral session_id is sent so server-side
+analytics can group events from one module instance without correlating
+across runs or users. Fixed / ACMTable / ACMLinear routes send no
+telemetry at all.
+
+To disable telemetry entirely:
+
+    export AGENTCODEC_TELEMETRY=0
+
+See the README section "Anonymous telemetry" for the full payload list,
+the privacy invariants we test, and how to point telemetry at your own
+collector instead of the default endpoint.
+
+
+Third-party software
+--------------------
+
+This package depends on third-party software distributed under their own
+licenses. Notable runtime dependencies include:
+
+  - numpy           BSD-3-Clause
+  - pydantic        MIT
+  - PyYAML          MIT
+  - httpx           BSD-3-Clause
+  - openai SDK      Apache-2.0
+  - anthropic SDK   MIT
+  - ollama Python SDK  MIT
+  - sentence-transformers (optional, [remote-semknn] extra)   Apache-2.0
+  - FastAPI / uvicorn / slowapi  (backend service, not shipped to clients)
+
+The full third-party license text is reproduced where required by each
+upstream project.
+
+
+Prior-method baselines: paper attribution + reference-implementation credit
+---------------------------------------------------------------------------
+
+The seven prior-method baselines shipped under ``agentcodec/techniques/
+baselines.py`` (Self-Consistency, Self-Refine, Chain-of-Verification,
+Best-of-N, Weighted Best-of-N, CISC, Mixture-of-Agents) are
+re-implementations from the cited papers — no source code was copied
+from any of the listed reference repositories. Each class docstring
+carries the canonical paper citation with arXiv ID, author, and year.
+
+Two of the baselines additionally reference an open-source reference
+implementation in their docstrings as context; we did not copy code
+from either:
+
+  - CISC  — google-research/google-research/cisc (Apache License 2.0)
+            Copyright 2025 Google LLC.
+            Re-implemented from Taubenfeld et al. 2025 (arXiv:2502.06233).
+            Source: https://github.com/google-research/google-research/tree/master/cisc
+
+  - MoA   — togethercomputer/MoA (Apache License 2.0)
+            Copyright 2024 Together Computer, Inc.
+            Re-implemented from Wang et al. 2025 (arXiv:2406.04692).
+            Source: https://github.com/togethercomputer/MoA
+
+Mixture-of-Agents — verbatim aggregator instruction
+---------------------------------------------------
+
+``MixtureOfAgentsBaseline._AGGREGATOR_INSTRUCTION`` reproduces verbatim
+(~150 words) the aggregator instruction string from Wang et al. 2025,
+"Mixture-of-Agents Enhances Large Language Model Capabilities" (Section 2),
+which also appears in the official togethercomputer/MoA repository's
+``inject_references_to_messages`` helper. The string is reproduced verbatim
+because the paper's quality claims depend on the specific framing.
+
+This verbatim reproduction is provided under the terms of the Apache
+License 2.0 from the togethercomputer/MoA upstream:
+
+   Licensed under the Apache License, Version 2.0 (the "License"); you
+   may not use this file except in compliance with the License. You may
+   obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+   implied. See the License for the specific language governing
+   permissions and limitations under the License.
+
+The Apache 2.0 grant covers this specific verbatim string. The rest of
+``MixtureOfAgentsBaseline`` is the AgentCodec authors' independent
+implementation and is licensed under the PolyForm Noncommercial License
+1.0.0 as stated above.

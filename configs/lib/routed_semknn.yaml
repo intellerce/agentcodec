@@ -1,0 +1,72 @@
+# Library deployment config — ROUTED strategy via the remote SemKNN service.
+# --------------------------------------------------------------------------
+# SemKNN picks the best technique per prompt, trading quality against cost
+# via `lambda` (higher = cheaper picks). In this release SemKNN is a remote
+# service: the public package sends only a unit-norm embedding (no prompt)
+# to the backend you point at via `server_url`.
+#
+# The `models` below describe YOUR channel pool. The backend matches your
+# lineup against trained profiles; if your set differs from a known profile,
+# the response carries an `estimate: true` flag plus a one-time warning.
+
+models:
+  - model: "qwen2.5:7b"
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"
+    temperature: 0.7
+    cost_per_1m: { input: 0.10, output: 0.10 }
+
+  - model: "llama3.1:8b"
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"
+    temperature: 0.7
+    cost_per_1m: { input: 0.10, output: 0.10 }
+
+  - model: "qwen3:14b"
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"
+    temperature: 0.7
+    thinking: false
+    cost_per_1m: { input: 0.20, output: 0.20 }
+
+judge:
+  model: "gemma3:12b"
+  base_url: "http://localhost:11434/v1"
+  api_key: "ollama"
+  cost_per_1m: { input: 0.15, output: 0.15 }
+
+critic:
+  same: true
+
+strategy:
+  type: "routed"
+  router:
+    type: "semknn"
+    # server_url is OPTIONAL — defaults to the public hosted backend
+    # at https://agentcodec.intellerce.com. Uncomment + edit only if
+    # you're talking to a self-host, an academic-access endpoint, or
+    # a local dev backend. Or set AGENTCODEC_SEMKNN_SERVER_URL.
+    # server_url: "https://your-backend.example.com"
+    lambda: 5.0                                       # higher = bias toward cheaper picks
+    # knn_k_override: 20                              # optional; override server default
+    # strict_match: false                             # optional; null = use server policy
+    # api_key: "..."                                  # else read $AGENTCODEC_API_KEY
+    # Offline degradation. Default `none` = fail loudly when backend is unreachable.
+    # fallback: linear
+    # fallback_cache: weights/linear.json
+
+  # Per-technique knob overrides applied when the router picks them.
+  dispatch:
+    harq_ir:  { max_rounds: 4 }
+    fountain: { num_branches: 2 }
+
+defaults:
+  category: "auto"
+  on_error: "fallback_baseline"
+  early_exit: false
+  task_timeout_s: 300
+  soft_normalization:
+    enabled: true
+  streaming:
+    events: "all"
+    chunk_format: "delta"

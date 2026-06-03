@@ -1,0 +1,60 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- Distribution / packaging ---
+build/
+dist/
+wheels/
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Test / coverage / type-check caches ---
+.pytest_cache/
+.cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# --- Secrets / local env ---
+.env
+.env.*
+!env.example
+!.env.example
+
+# --- IDE / editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# --- Project-specific ---
+# Real API keys live in .env; the template is env.example (committed).
+# Downloaded benchmark datasets — regenerated via benchmarks/download_datasets.py
+benchmarks/data/
+benchmarks/data_hard/
+
+# Local config backups (kept out of the public repo)
+configs/BACKUPS/
+
+# Benchmark / run outputs
+results/
+outputs/
+*.log
+benchmarks/data

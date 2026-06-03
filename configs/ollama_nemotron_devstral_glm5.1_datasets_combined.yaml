@@ -1,0 +1,297 @@
+# AgentCodec — Ollama (local) Configuration
+# ============================================
+#
+# SETUP
+# -----
+# 1. Install Ollama:         https://ollama.com/download
+# 2. Pull models (e.g.):
+#      $ ollama pull llama3.1:8b            # primary channel
+#      $ ollama pull qwen2.5:7b             # second channel (spatial diversity)
+#    For a stronger judge, also pull a larger model:
+#      $ ollama pull llama3.1:70b           # better quality scoring
+#
+# 3. Start the server (if not already running):
+#      $ ollama serve
+#
+# 4. Run the benchmark:
+#      $ python run_benchmark.py -c configs/ollama.yaml
+#
+# NOTES
+# -----
+# - Ollama exposes an OpenAI-compatible API: locally on port 11434
+#   (http://localhost:11434/v1) or directly in the cloud at https://ollama.com/v1.
+#   The local server can also proxy to cloud models, so either base_url works
+#   with the `*-cloud` model names below.
+# - API key — what matters is the MODEL, not the URL:
+#     * Local-only models (pulled and served on your machine) → any non-empty
+#       string works; Ollama ignores it.
+#     * Cloud models (`*-cloud`, `:cloud`) → must be a REAL Ollama cloud API
+#       key, even when reached via the local server. This config uses cloud
+#       models, so a real key is required.
+# - Model names must match what you pulled (run `ollama list` to check).
+# - For spatial diversity, use two different model families.
+# - Smaller models are faster but produce noisier outputs — this actually
+#   makes the communication-theoretic techniques more impactful.
+#
+# THE FOUR LLM ROLES (who does what)
+# ----------------------------------
+# A single run uses up to four distinct roles. They are different jobs, often
+# played by different models:
+#
+#   1. GENERATOR(s)  — config key: `models:` (below)
+#        The channel(s) that actually produce candidate answers. Listing two
+#        different families gives spatial diversity. Everything else is built
+#        on top of these.
+#
+#   2. JUDGE         — config keys: `judge_model`, `judge_base_url`,
+#                      `judge_api_key`, `judge_extra_body`
+#        The quality SCORER / channel estimator. It reads a finished answer and
+#        rates its quality on [0, 1] — this is the CSI (soft reliability info)
+#        that weighting techniques (MRC, weighted_bon, fountain, CISC, ...) use.
+#        It does NOT rewrite answers. There is exactly one judge per run.
+#        NOTE: tasks with a deterministic `score_mode` (exact_letter, numeric,
+#        yes_no, exact_match, relaxed) BYPASS the judge entirely — those are
+#        graded by code, so the judge only matters for free-form / creative.
+#
+#   3. CRITIC        — config key: `critic_model` (string; see below)
+#        Used ONLY by the iterative techniques HARQ-IR and Turbo. It reads the
+#        current draft and writes a CRITIQUE / feedback that drives the next
+#        refinement round (the decode-loop feedback signal). Unlike the judge it
+#        produces text-to-act-on, not a score. Default "same" reuses the
+#        generator model (communication-faithful); other techniques ignore it.
+#
+#   4. VOTER / AGGREGATOR — config key: `voter_model` (string; see below)
+#        The LLM that fuses N samples into one answer in the vote-style
+#        baselines (self_consistency, weighted_bon, cisc, mixture_of_agents,
+#        diversity_mrc_discrete_N). Defaults to the PRIMARY generator
+#        (`models[0]`) at temperature 0 — set `voter_model` to override.
+#        (best_of_n / diversity_sc_N pick the top-scored sample by judge score
+#        and use no voter LLM, so this knob does not affect them.)
+#
+#   Judge vs Critic vs Voter, in one line each:
+#     judge  → SCORES a final answer        (estimator; one per run)
+#     critic → CRITIQUES a draft to refine  (HARQ-IR / Turbo only)
+#     voter  → COMBINES N answers into one  (vote baselines; default models[0])
+
+base_url: "https://ollama.com/v1"
+# api_key: ""
+
+# LLM Models (channels)
+# Use two different model families for spatial diversity
+models:
+  - model: "nemotron-3-nano:30b-cloud"
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
+    temperature: 0.7              # base / fallback
+    category_temperatures:
+      qa: 0.2                     # deterministic — correctness > variety
+      reasoning: 0.4              # some exploration without losing the chain
+      creative: 0.8               # diversity is the point
+      code: 0.2                   # follow the spec
+  - model: "devstral-small-2:24b-cloud"
+    temperature: 0.7
+    category_temperatures:
+      qa: 0.2                     # deterministic — correctness > variety
+      reasoning: 0.4              # some exploration without losing the chain
+      creative: 0.8               # diversity is the point
+      code: 0.2                   # follow the spec
+    # temperature: 0.7
+  # To use Qwen3 with thinking disabled:
+  # - model: "qwen3:8b"
+  #   temperature: 0.7
+  #   extra_body:
+  #     enable_thinking: false
+
+# JUDGE — quality scorer / channel estimator (role #2 above).
+# SCORES finished answers on [0,1]; does not rewrite them. One per run.
+# Ideally use the same or a stronger model than the generators.
+# (Free-form/creative tasks only; deterministic score_modes bypass it.)
+judge_model: "glm-5.1:cloud"
+judge_base_url: "https://ollama.com/v1"
+# judge_api_key: ""
+judge_extra_body:
+  chat_template_kwargs:
+    enable_thinking: false
+  enable_thinking: false
+  options:
+    think: false
+  # thinking: false
+  # think: false
+  # reasoning: false
+
+# CRITIC — feedback model for the ITERATIVE techniques only (HARQ-IR, Turbo;
+# role #3 above). CRITIQUES the current draft so the next round can refine it.
+# Other techniques ignore this. Accepted values:
+#   "same"        → reuse the generator model (default; communication-faithful)
+#   "judge"       → reuse the judge model above as the critic
+#   "<model_name>" → a dedicated critic model, e.g. "glm-5.1:cloud"
+critic_model: "same"
+
+# VOTER / AGGREGATOR — fuses the N samples into one answer in the vote-style
+# baselines (self_consistency, weighted_bon, cisc, mixture_of_agents,
+# diversity_mrc_discrete_N; role #4 above). Accepted values:
+#   "primary"      → the primary generator, models[0], at temperature 0
+#                    (default; bit-identical to previous behavior)
+#   "judge"        → reuse the judge model above as the voter
+#   "<model_name>" → a dedicated voter model, e.g. "glm-5.1:cloud"
+# Left commented → defaults to "primary".
+# voter_model: "primary"
+# Techniques to evaluate
+# Per-task-category temperature (off by default — bit-identical to a fixed temp)
+# When true, the runner swaps each generator channel's temperature to the value
+# resolved for the current task's category just before running each technique,
+# then restores the model's base `temperature`. Judge and critic are NOT touched.
+# Configure per-model overrides above via `category_temperatures:`, e.g.
+#   - model: "..."
+#     temperature: 0.7              # base / fallback
+#     category_temperatures:
+#       qa: 0.2                     # deterministic — correctness > variety
+#       reasoning: 0.4              # some exploration without losing the chain
+#       creative: 0.8               # diversity is the point
+#       code: 0.2                   # follow the spec
+# Categories without an override use the model's base `temperature`.
+# Caveat: lowering temperature for code/qa shrinks the noise budget that
+# diversity / HARQ / turbo / fountain rely on — those techniques may show
+# smaller gains on those categories. Run a paired ablation if you care.
+per_category_temperature: false
+
+techniques:
+  - "baseline"
+  # Diversity combining
+  - "diversity_sc"
+  - "diversity_mrc"
+  - "diversity_egc"
+  # HARQ
+  - "harq_cc"
+  - "harq_ir"
+  # Turbo iterative decoding
+  - "turbo"
+  # Fountain / Rateless
+  - "fountain"
+  # FEC at different code rates
+  - "fec_0.75"
+  - "fec_0.50"
+  - "fec_0.33"
+  # Adaptive Coding & Modulation
+  - "acm"
+  # - "diversity_mrc_soft"
+  # - "diversity_mrc_discrete_N_soft"
+  # - "fountain_soft"
+  # - "acm_soft"
+  # Our wider-pool multi-model diversity operators
+  - "diversity_sc_N"
+  - "diversity_mrc_discrete_N"
+  # Prior-method reproductions (canonical single-model, matched-budget)
+  - "self_consistency"
+  - "self_refine"
+  - "chain_of_verification"
+  - "best_of_n"
+  - "weighted_bon"
+  - "mixture_of_agents"
+  - "cisc"
+  
+
+categories:
+  - "qa"
+  - "reasoning"
+  - "creative"
+  - "code"
+
+# Per-category prompt augmentation. Steers GENERATION only — the original
+# prompt and reference are always what the judge and the deterministic
+# scorers see, so answer extraction (last number / MC letter / fenced code)
+# is never broken by these instructions.
+#
+# Each category picks one mode:
+#   mode: as_is                       # send the prompt verbatim
+#   mode: system_prompt               # prepend a system-role message
+#     system_prompt: |
+#       <text inserted as a system message>
+#   mode: user_prompt_template        # rewrite the user message
+#     user_prompt_template: |
+#       <text with {prompt} as the placeholder>
+#
+# The system prompts below are written to MATCH each category's scorer so we
+# get cleanly-gradable outputs:
+#   - qa        → MMLU-style `exact_letter`: must end on a single option letter
+#   - reasoning → GSM8K-style `numeric` (LAST number wins): final line is the
+#                 bare number, so intermediate working can't poison extraction
+#   - code      → HumanEval `score_code` runs a single fenced ```python block
+#   - creative  → pure LLM judge: reward directness, structure, no filler
+category_prompts:
+  qa:
+    mode: system_prompt
+    system_prompt: |
+      You are answering a multiple-choice question. Think briefly if needed,
+      then give your final answer as a single option letter (A, B, C, D, ...).
+      End your response with a line of exactly the form:
+      Answer: <LETTER>
+      Do not put any text after that line.
+  reasoning:
+    mode: system_prompt
+    system_prompt: |
+      You are solving a math word problem. Show your reasoning concisely.
+      Then, on the FINAL line, output only the final numeric answer with no
+      units, no words, no currency symbols, and no trailing punctuation —
+      just the number. The very last number in your response must be the
+      answer, so never write any other number after it.
+  code:
+    mode: system_prompt
+    system_prompt: |
+      You are completing a Python coding task. Return exactly one Python code
+      block fenced with ```python ... ``` that contains the complete, runnable
+      function (including its def line and any imports it needs). Do not split
+      the solution across multiple code blocks and do not include example
+      usage, tests, or prose outside the code block.
+  creative:
+    mode: system_prompt
+    system_prompt: |
+      You are completing a creative writing task. Answer the prompt directly
+      and stay on topic. Open with substance (no throat-clearing preamble),
+      keep the structure clear, and stop when the task is fully addressed —
+      no filler, repetition, or meta-commentary about the request.
+
+output_dir: "results/dataset_repeats"
+cache_dir: "results/ollama_nemotron_devstral_glm5.1_datasets_repeats"
+
+# min_difficulty: "hard"
+
+plot_dir: "plots/ollama_nemotron_devstral_glm5.1_datasets_repeats"
+
+
+include_standard: false
+# Set false to skip the curated in-repo task lists
+# (qa_tasks/reasoning_tasks/creative_tasks/code_tasks + hard_* + extreme_*)
+# so the benchmark uses ONLY the downloaded datasets below.
+include_curated: false
+use_downloaded: true
+downloaded_n: null
+data_dir: "benchmarks/data"
+
+# CISC-style softmax-with-T normalization for soft-method aggregation
+# (diversity_mrc_soft, diversity_mrc_discrete_N, diversity_mrc_discrete_N_soft,
+# fountain). See configs/default.yaml for the full block including
+# per-csi_source T values; override here only if needed.
+soft_normalization:
+  enabled: true
+
+
+repeat_runs: 3
+
+
+# Number of (task, repeat) workers to run concurrently within a single
+# technique. Default 1 = sequential (current bit-identical behavior).
+# When > 1, the runner uses a ThreadPoolExecutor so network-bound LLM calls
+# overlap, sharing channel/scorer instances. Per-task state (judge
+# accumulator, per-category temperature override) is kept per-thread, so
+# concurrent workers stay isolated and per-category temperatures still apply
+# correctly to each task.
+# Notes:
+#   - SIGALRM-based per-task watchdog is disabled in parallel mode (Python's
+#     signal module only works on the main thread); HTTP timeouts on the
+#     channel client (240/300s) and the per-attempt retry in transmit() still
+#     apply.
+#   - Tune to your backend's concurrency budget (Ollama parallel-request
+#     limit, OpenAI RPM tier, vLLM batch capacity). Too high will throttle.
+parallel_tasks: 5

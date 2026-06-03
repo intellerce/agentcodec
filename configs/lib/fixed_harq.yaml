@@ -1,0 +1,38 @@
+# Library deployment config — FIXED strategy: always use HARQ-IR.
+# ----------------------------------------------------------------
+# The simplest production setup. Every prompt runs through HARQ-IR
+# (incremental redundancy: generate -> critique -> refine until quality
+# threshold met or max_rounds reached).
+#
+#   from agentcodec import ReliabilityModule
+#   mod = ReliabilityModule.from_yaml("configs/lib/fixed_harq.yaml")
+#   out = mod.run("How does diffusion sampling work?", category="reasoning")
+#   print(out.text, out.cost_usd, out.technique_used)
+
+models:
+  - model: "qwen2.5:7b"
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"
+    temperature: 0.7
+    cost_per_1m: { input: 0.10, output: 0.10 }   # set explicitly to avoid inference warning
+
+judge:
+  model: "gemma3:12b"
+  base_url: "http://localhost:11434/v1"
+  api_key: "ollama"
+  cost_per_1m: { input: 0.15, output: 0.15 }
+
+critic:
+  same: true   # reuse the channel model as critic (recommended for HARQ-IR)
+
+strategy:
+  type: "fixed"
+  technique: "harq_ir"
+  params:
+    max_rounds: 4   # default 5; lower = faster but less protection
+
+defaults:
+  category: "auto"
+  on_error: "fallback_baseline"
+  early_exit: false
+  task_timeout_s: 300

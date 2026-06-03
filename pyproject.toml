@@ -1,0 +1,157 @@
+[build-system]
+requires = ["setuptools>=68", "setuptools-scm>=8", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentcodec"
+dynamic = ["version"]
+description = "Communication-theoretic reliability techniques for LLM agents (source-available; free for research and noncommercial use)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Hamed Omidvar", email = "research@intellerce.com" },
+    { name = "Vahideh Akhlaghi", email = "research@intellerce.com" },
+]
+maintainers = [{ name = "INTELLERCE LLC", email = "research@intellerce.com" }]
+keywords = [
+    "llm", "agents", "reliability", "ensembling",
+    "harq", "diversity", "semknn", "router",
+    "communication-theory", "self-refine", "self-consistency",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "License :: Free for non-commercial use",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Core install — everything the library needs to actually run, including
+# the BGE encoder (fastembed, pure-ONNX, no torch). The encoder is core
+# because:
+#   * anonymous telemetry events need an embedding per row to be useful
+#     for retraining the SemKNN profile;
+#   * the RemoteSemKNNRouter encodes prompts client-side (zero prompt
+#     leakage to the backend).
+# Provider SDKs (openai, anthropic, ollama) stay lazy-imported via extras.
+dependencies = [
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+    "numpy>=1.24",
+    "httpx>=0.26",
+    "fastembed>=0.3",
+]
+
+[project.optional-dependencies]
+# Provider SDKs — pick the ones you actually use.
+openai = ["openai>=1.40"]
+anthropic = ["anthropic>=0.40"]
+ollama = ["ollama>=0.3"]
+
+# Remote-SemKNN client-side BGE encoder.
+remote-semknn = [
+    "sentence-transformers>=2.7",
+    "torch>=2.0",
+]
+
+# Paired statistics (bootstrap CIs, Wilcoxon, Benjamini-Hochberg) used by
+# agentcodec.evaluation. Library .run() / .stream() don't need it.
+eval = ["scipy>=1.10"]
+
+# Benchmark CLI + paper reproduction. Heavy plotting deps.
+benchmark = [
+    "matplotlib>=3.7",
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "datasets>=2.16",
+    "python-dotenv>=1.0",
+]
+
+# Everything except `dev`.
+all = [
+    "agentcodec[openai,anthropic,ollama,remote-semknn,eval,benchmark]",
+]
+
+# Pinned so CI lint stays reproducible — a floating ruff pulls in new
+# lint rules over time and turns a green build red without a code change.
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+    "ruff==0.15.12",
+    "mypy>=1.8",
+]
+
+[project.scripts]
+agentcodec = "agentcodec.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/intellerce/agentcodec"
+Issues = "https://github.com/intellerce/agentcodec/issues"
+Changelog = "https://github.com/intellerce/agentcodec/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agentcodec*"]
+exclude = ["tests*", "results*", "plots*", "configs*", "paper*", "benchmarks*"]
+
+[tool.setuptools.package-data]
+agentcodec = ["py.typed", "routing/model_aliases.json"]
+
+# Single source of truth for the version — derived from the most recent
+# git tag. The package dir is the git repo root, so `root` is "." (default).
+# Falls back to `fallback_version` on a non-git checkout (installed tarball).
+[tool.setuptools_scm]
+root = "."
+fallback_version = "0.3.0"
+local_scheme = "no-local-version"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+ignore = [
+    "E501",     # line length handled by formatter only
+    # Ambiguous-Unicode rules: the codebase intentionally uses math
+    # notation (λ, α, ×, −, –) in docstrings, comments, and log strings.
+    # These are correct, not typos.
+    "RUF001",   # ambiguous char in string
+    "RUF002",   # ambiguous char in docstring
+    "RUF003",   # ambiguous char in comment
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Every B023 hit is a `loop.run_in_executor(None, lambda: ...)` that is
+# awaited within the same loop iteration, so late-binding of the loop
+# variable cannot occur. Scoped here rather than globally so the rule
+# still guards genuinely-deferred closures elsewhere.
+"agentcodec/dispatch.py" = ["B023"]
+"agentcodec/runner.py" = ["B023"]
+"agentcodec/evaluation/evaluator.py" = ["B023"]
+# Class-level constant lookup tables (e.g. CHECKS_WITH_REF), never mutated.
+"agentcodec/channel.py" = ["RUF012"]
+"agentcodec/techniques/turbo.py" = ["RUF012"]
+# pytest.raises(match=...) takes a regex; these patterns intentionally
+# match a literal substring of the error message.
+"tests/*" = ["RUF043"]
+
+[tool.mypy]
+python_version = "3.10"
+strict_optional = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+files = ["agentcodec"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning:pydantic.*",
+]
