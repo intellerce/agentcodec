@@ -29,12 +29,17 @@ from collections import defaultdict
 from pathlib import Path
 
 import yaml
-from dotenv import load_dotenv
-
-load_dotenv()  # loads .env file into os.environ
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+# Use the library's vendored, zero-dependency .env loader instead of the
+# external `python-dotenv` package, so the benchmark runner has one fewer
+# install requirement. Importing agentcodec already auto-loads `.env`; the
+# explicit call here is harmless and keeps intent obvious.
+from agentcodec import load_dotenv
+
+load_dotenv()  # loads .env file into os.environ
 
 from agentcodec.plots import plot_all, plot_all_from_cache
 from agentcodec.runner import BenchmarkRunner, ExperimentConfig

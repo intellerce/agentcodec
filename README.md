@@ -60,10 +60,16 @@ On our paper benchmark, the **SemKNN** cost-aware router achieves up to **~56% c
 
 ### Path A — clone + editable install (recommended for hacking)
 
+
+
 ```bash
 git clone https://github.com/intellerce/agentcodec.git
 cd agentcodec
+```
 
+We recommend creating your own python environment before installation. You can use `setup.sh` to do so using `uv` as explained below.
+
+```bash
 # Core install — pydantic, numpy, httpx, and fastembed (ONNX-runtime BGE
 # encoder, no torch). The default encoder is **bge-small-en-v1.5** (384-d,
 # ~130 MB downloaded on first use, ~10 ms CPU per embed). Required because

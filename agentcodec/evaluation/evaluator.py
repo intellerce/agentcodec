@@ -177,7 +177,7 @@ class Evaluator:
         *,
         baseline: str | None = None,
         alpha: float = 0.05,
-        progress_callback: "Callable[[dict[str, Any]], None] | None" = None,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> EvalReport:
         """Evaluate every config × prompt × repeat and return an EvalReport.
 

@@ -11,16 +11,55 @@ one-line note on how it was scored, and `explain_score(result, score_mode=...)`
 15-criterion checklist — which criteria passed, their weights, and the
 weighted sum — so you can see exactly where a score came from.
 
+## Running the examples
+
+**1. Install the library** (from the package source root, the directory
+containing `pyproject.toml`):
+
 ```bash
-# from the package source root:
-pip install -e '.[openai]'             # core + the OpenAI-compat SDK (Ollama uses it)
-
-# Pull the three models the examples assume (one-time, ~12 GB total).
-ollama pull qwen3:8b llama3.1:8b gemma3:12b
-ollama serve &
-
-python examples/01_hello_baseline.py
+pip install -e '.[all]'             # core + all libraries (you can choose specific ones if you prefer)
 ```
+
+**2. Provide a backend.** By default the examples target a local Ollama
+server, so pull the three models they assume (one-time, ~12 GB total) and
+start the server:
+
+```bash
+ollama pull qwen3:8b
+ollama pull llama3.1:8b
+ollama pull gemma3:12b
+ollama serve                         # if not already running as a service
+```
+
+To run against OpenAI / Anthropic / any OpenAI-compatible endpoint instead,
+skip the Ollama step and set the env vars under
+[Switching provider](#switching-provider) (or drop them in a `.env` file —
+see below).
+
+**3. Run any example** from the package source root, by filename:
+
+```bash
+python examples/01_hello_baseline.py
+python examples/03_diversity_mrc.py
+```
+
+Each script is independent — run them in any order. A few accept an optional
+argument to pick a technique or shim (noted in the index below), e.g.:
+
+```bash
+python examples/10_async_streaming.py turbo
+python examples/13_expose_reliability_stream.py all
+```
+
+### Configuration
+
+Examples read their model/endpoint settings from environment variables. You
+can either `export` them in your shell (see
+[Switching provider](#switching-provider)) or put them in a `.env` file in the
+directory you run from — the examples auto-load it via `load_dotenv()`. Shell
+exports take precedence over `.env`; opt out of `.env` loading entirely with
+`AGENTCODEC_DISABLE_DOTENV=1`. See the top of [`_common.py`](_common.py) for
+the full env-var list and defaults.
 
 ## Index
 
