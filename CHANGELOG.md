@@ -54,9 +54,11 @@ First public, source-available push. Not on PyPI yet — install from Git
 - Drop-in provider shims: `agentcodec.openai`, `agentcodec.anthropic`,
   `agentcodec.ollama` — swap one import, get reliability with an optional
   `reliability=` kwarg. Pure passthrough when unused.
-- 29 dispatchable techniques across six families plus 7 prior-method
-  baselines (Self-Consistency, Self-Refine, Chain-of-Verification,
-  Best-of-N, Weighted Best-of-N, CISC, Mixture-of-Agents).
+- 28 reliability techniques — 21 communication-theoretic across six
+  families plus 7 prior-method baselines (Self-Consistency, Self-Refine,
+  Chain-of-Verification, Best-of-N, Weighted Best-of-N, CISC,
+  Mixture-of-Agents) — measured against an uncoded single-pass baseline,
+  for 29 dispatchable entries in total.
 - Examples suite under `examples/` (00–16) covering drop-in usage,
   per-technique demos, async streaming, thinking capture, code scoring,
   and the showcase lift table.

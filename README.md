@@ -3,7 +3,7 @@
 ## A unifying, cost-aware reliability framework for LLM agents: prior methods and communication-theoretic techniques behind one interface.
 
 
-AgentCodec wraps every LLM call in a **technique** drawn from classical communication theory: HARQ for iterative refinement, diversity combining for ensembles of models, FEC for redundancy under budget pressure, ACM routing for adaptive coding/modulation. **29 dispatchable techniques in total**: **22 communication-theoretic** methods across six families (the `baseline` reference + HARQ, turbo, fountain, FEC, diversity combining, ACM routing) and **7 prior-method baselines** (Self-Consistency, Self-Refine, Chain-of-Verification, Best-of-N, Weighted Best-of-N, CISC, Mixture-of-Agents). See the [breakdown](#technique-breakdown) below.
+AgentCodec wraps every LLM call in a **technique** drawn from classical communication theory: HARQ for iterative refinement, diversity combining for ensembles of models, FEC for redundancy under budget pressure, ACM routing for adaptive coding/modulation. **28 reliability techniques**: **21 communication-theoretic** methods across six families (HARQ, turbo, fountain, FEC, diversity combining, ACM routing) and **7 prior-method baselines** (Self-Consistency, Self-Refine, Chain-of-Verification, Best-of-N, Weighted Best-of-N, CISC, Mixture-of-Agents), all measured against an uncoded single-pass `baseline` (29 dispatchable entries in `KNOWN_TECHNIQUES`, counting that reference). See the [breakdown](#technique-breakdown) below.
 
 It started as the reference implementation for the working paper *A Communication-Theoretic Framework for LLM Agents: Cost-Aware Adaptive Reliability* and ships as a library you can drop into an app.
 
@@ -390,7 +390,7 @@ Swap `strategy` for any of the techniques in [§per-technique reference](#per-te
 
 ### Async + streaming
 
-`mod.astream()` is **natively async end-to-end** — `AsyncOpenAI` / `AsyncAnthropic` / `httpx.AsyncClient` underneath, no worker-thread bridge. **27 of the 29 techniques** stream natively (see [§streaming API](#streaming-api)); per-token deltas flow through unbuffered with role tags so you can demux drafts from critiques from the final answer:
+`mod.astream()` is **natively async end-to-end** — `AsyncOpenAI` / `AsyncAnthropic` / `httpx.AsyncClient` underneath, no worker-thread bridge. **All but 2 of the 29 dispatchable entries** stream natively (only `acm_soft` and `acm_learned` don't — see [§streaming API](#streaming-api)); per-token deltas flow through unbuffered with role tags so you can demux drafts from critiques from the final answer:
 
 ```python
 import asyncio
@@ -735,7 +735,7 @@ Self-hosting requires a license from us. The service itself (FastAPI + numpy, ~1
 
 `mod.stream(prompt)` and `mod.astream(prompt)` return iterators of typed events. Filter by event class — every stream ends with exactly one `FinalEvent` carrying the `ReliabilityResult`.
 
-`astream()` drives the **native async path** end-to-end: `AsyncOpenAI` / `AsyncAnthropic` / `httpx.AsyncClient` underneath, technique-level async generators on top. Per-token deltas flow through unbuffered for **27 of the 29 techniques** — see [`_ASTREAM_TECHNIQUES`](agentcodec/dispatch.py) or call `agentcodec.dispatch.is_streamable("name")` to introspect. Only `acm_soft` and `acm_learned` still fall back to sync `dispatch()` in an executor.
+`astream()` drives the **native async path** end-to-end: `AsyncOpenAI` / `AsyncAnthropic` / `httpx.AsyncClient` underneath, technique-level async generators on top. Per-token deltas flow through unbuffered for **all but 2 of the 29 dispatchable entries** — see [`_ASTREAM_TECHNIQUES`](agentcodec/dispatch.py) or call `agentcodec.dispatch.is_streamable("name")` to introspect. Only `acm_soft` and `acm_learned` still fall back to sync `dispatch()` in an executor.
 
 ```python
 from agentcodec import TokenEvent, ProgressEvent, WarningEvent, FinalEvent
@@ -1203,11 +1203,11 @@ Every technique below is dispatched by `agentcodec.dispatch.dispatch()` and shar
 
 ### Technique breakdown
 
-`agentcodec.KNOWN_TECHNIQUES` exposes **29 dispatchable techniques in total** — **22 communication-theoretic** methods across six families plus **7 prior-method baselines** for head-to-head comparison. (The 7 baselines are part of the 29, not in addition to it.) On top of these sit **3 adaptive routers** (`semknn`, `acm_table`, `acm_linear`) — the strategy-layer realization of the ACM family, counted separately because they *orchestrate* the 29 rather than appearing in the dispatch enum; see the [router table](#routers-strategy-layer) below.
+`agentcodec.KNOWN_TECHNIQUES` exposes **29 dispatchable entries** — **28 reliability techniques** (**21 communication-theoretic** methods across six families plus **7 prior-method baselines** for head-to-head comparison) and the uncoded single-pass `baseline` they're measured against. (The 7 prior-method baselines are part of the 28, not in addition to it.) On top of these sit **3 adaptive routers** (`semknn`, `acm_table`, `acm_linear`) — the strategy-layer realization of the ACM family, counted separately because they *orchestrate* the rest rather than appearing in the dispatch enum; see the [router table](#routers-strategy-layer) below.
 
 | Origin | Family | Techniques | Count |
 |---|---|---|--:|
-| Prior | Reference | `baseline` | 1 |
+| Reference | Uncoded (single pass) | `baseline` | 1 |
 | Ours | HARQ (ARQ retry / combine) | `harq_cc`, `harq_ir` | 2 |
 | Ours | Turbo decoding | `turbo` | 1 |
 | Ours | Fountain (rateless) | `fountain`, `fountain_soft` | 2 |
@@ -1215,11 +1215,13 @@ Every technique below is dispatched by `agentcodec.dispatch.dispatch()` and shar
 | Ours | Diversity combining | `diversity_sc`, `diversity_mrc`, `diversity_egc`, `diversity_sc_N`, `diversity_mrc_discrete_N`, `diversity_spatial`, `diversity_frequency`, `diversity_time`, `diversity_mrc_soft`, `diversity_mrc_discrete_N_soft` | 10 |
 | Ours | ACM routing (adaptive coding/modulation) | `acm`, `acm_soft`, `acm_learned` | 3 |
 | Prior | Baselines | `self_consistency`, `self_refine`, `chain_of_verification`, `best_of_n`, `weighted_bon`, `cisc`, `mixture_of_agents` | 7 |
-| | **Total** | | **29** |
+| | **Reliability techniques** | | **28** |
+| | **+ uncoded `baseline` reference** | | **1** |
+| | **Dispatchable total** | | **29** |
 
-Communication-theoretic subtotal: **22** (1 reference + 21 across the six families). Prior-method baselines: **7**.
+Communication-theoretic subtotal: **21** across the six families. Prior-method baselines: **7**. That's **28 reliability techniques**; the uncoded `baseline` (single pass, no redundancy) is the reference they're all measured against, which brings the dispatch enum to **29** entries.
 
-> **Routers live at the strategy layer, not in this list — but they're still techniques.** In communication theory, adaptive coding-modulation (ACM) *is* a technique; it's one of our six families. The library simply realizes ACM at **two layers**: the self-contained `acm` / `acm_soft` / `acm_learned` entries are dispatchable *leaf* techniques (probe difficulty → dispatch in-band) and so live in `KNOWN_TECHNIQUES`, while the `semknn` / `acm_table` / `acm_linear` *routers* — SemKNN being the flagship cost-aware one that delivers the ~56% number — **orchestrate the other techniques** and so are configured via `strategy.type` (see [§Strategies: fixed vs routed](#strategies-fixed-vs-routed) and the [router table](#routers-strategy-layer) below) rather than dispatched by name. They're techniques in the comm-theory sense; they just aren't *leaf* entries in the dispatch catalog, which is why the count of **29 dispatchable techniques** doesn't include them.
+> **Routers live at the strategy layer, not in this list — but they're still techniques.** In communication theory, adaptive coding-modulation (ACM) *is* a technique; it's one of our six families. The library simply realizes ACM at **two layers**: the self-contained `acm` / `acm_soft` / `acm_learned` entries are dispatchable *leaf* techniques (probe difficulty → dispatch in-band) and so live in `KNOWN_TECHNIQUES`, while the `semknn` / `acm_table` / `acm_linear` *routers* — SemKNN being the flagship cost-aware one that delivers the ~56% number — **orchestrate the other techniques** and so are configured via `strategy.type` (see [§Strategies: fixed vs routed](#strategies-fixed-vs-routed) and the [router table](#routers-strategy-layer) below) rather than dispatched by name. They're techniques in the comm-theory sense; they just aren't *leaf* entries in the dispatch catalog, which is why the count of **29 dispatchable entries** doesn't include them.
 
 ### Routers (strategy layer)
 
@@ -1471,7 +1473,7 @@ flowchart LR
 | `agentcodec/evaluation/` | `Evaluator`, `EvalReport`, paired statistics |
 | `agentcodec/channel.py` | LLM client wrapper; lazy-imports `openai` / `anthropic` |
 | `agentcodec/models.py` | Data classes (`TaskItem`, `AgentOutput`, `ReliabilityRun`) |
-| `agentcodec/techniques/` | The 29 dispatchable techniques |
+| `agentcodec/techniques/` | The 29 dispatchable entries (28 techniques + the uncoded baseline) |
 | `agentcodec/runner.py` | `BenchmarkRunner` — paper reproduction |
 | `agentcodec/plots.py` | Plotting helpers — soft-imported, optional install |
 
@@ -1504,7 +1506,7 @@ Plotting deps are optional — `pip install 'agentcodec[benchmark]'` to pick the
 
 - Pydantic `LibraryConfig` schema (strict; rejects unknown keys)
 - `ReliabilityModule.run()` / `arun()` for fixed and routed strategies
-- All 29 techniques dispatchable from the library (same as benchmark)
+- All 29 dispatchable entries available from the library (same as benchmark)
 - `RemoteSemKNNRouter` with eager BGE encoder load
 - CLI: `run`, `eval`, `inspect`
 - `Evaluator` for multi-config head-to-head (bootstrap CIs, paired Wilcoxon + BH correction, Cohen's d, Pareto frontiers, per-config judge with cross-judge warning, JSONL resume-on-kill, CI-gating)
@@ -1521,7 +1523,7 @@ Plotting deps are optional — `pip install 'agentcodec[benchmark]'` to pick the
 - `on_error: fallback_baseline` mode for production safety
 - **Thinking-text capture across all backends.** Anthropic `ThinkingBlock`, OpenAI `reasoning_content` (+ exact `reasoning_tokens` from `usage.completion_tokens_details`), Ollama `msg.thinking`, and inline `<think>...</think>` tag stripping all populate `AgentOutput.thinking_text` plus the full `thinking_*` telemetry (`emitted`, `tokens`, `tokens_source`, `chars`, `cost_usd`, `answer_tokens`, `answer_cost_usd`). Surfaced at `ReliabilityResult.thinking_text` / `.thinking_cost_usd` and per-call in `trace["calls"][*]["thinking"]["text"]`.
 - **Native async streaming via `AgentChannel.atransmit_stream()`.** Yields `ChannelChunk` deltas (role-tagged: `"answer"`, `"thinking"`, `"tool_call"`) and a terminal `ChannelDone` carrying the full `AgentOutput`. Implemented for all three backend paths — `AsyncOpenAI.chat.completions.create(stream=True)`, `AsyncAnthropic.messages.stream()`, and `httpx.AsyncClient` against Ollama's native `/api/chat`. `AgentChannel.atransmit()` drives the same stream and returns the final output.
-- **Native per-technique `astream()` for 27 of 29 techniques.** Sequential (per-call mid-stream deltas): `baseline`, `harq_ir`, `harq_cc`, `turbo`, `self_refine`, `chain_of_verification`, `fountain` / `fountain_soft`, `fec_0.75` / `0.50` / `0.33`. Parallel-branch (concurrent via `asyncio.gather`): `self_consistency`, `best_of_n`, `weighted_bon`, `cisc`, `mixture_of_agents`, `diversity_sc` / `mrc` / `egc` / `spatial` / `frequency` / `time` / `sc_N` / `mrc_discrete_N` / `mrc_soft` / `mrc_discrete_N_soft`. Router-style (delegate to sub-technique): `acm`. Only `acm_soft` and `acm_learned` still fall back to sync `dispatch()`. `agentcodec.dispatch.is_streamable(name)` introspects. See [§streaming API](#streaming-api) for the per-technique status table.
+- **Native per-technique `astream()` for all but 2 of the 29 dispatchable entries (`acm_soft`, `acm_learned`).** Sequential (per-call mid-stream deltas): `baseline`, `harq_ir`, `harq_cc`, `turbo`, `self_refine`, `chain_of_verification`, `fountain` / `fountain_soft`, `fec_0.75` / `0.50` / `0.33`. Parallel-branch (concurrent via `asyncio.gather`): `self_consistency`, `best_of_n`, `weighted_bon`, `cisc`, `mixture_of_agents`, `diversity_sc` / `mrc` / `egc` / `spatial` / `frequency` / `time` / `sc_N` / `mrc_discrete_N` / `mrc_soft` / `mrc_discrete_N_soft`. Router-style (delegate to sub-technique): `acm`. Only `acm_soft` and `acm_learned` still fall back to sync `dispatch()`. `agentcodec.dispatch.is_streamable(name)` introspects. See [§streaming API](#streaming-api) for the per-technique status table.
 - **Async streaming via `mod.astream()` — natively async end-to-end.** No more worker-thread bridge. Only `acm_soft` and `acm_learned` still fall back to sync `dispatch()` in an executor and emit only the terminal `FinalEvent`.
 - **`expose_reliability_stream=True` on the compat shims.** When set on `agentcodec.openai.OpenAI` / `agentcodec.anthropic.Anthropic` / `agentcodec.ollama.Client` (or per-call on `chat.completions.create` / `messages.create` / `chat`), intermediate reliability-layer roles (`draft`, `critique`, `verification`, `candidate`) surface as native stream chunks with sentinel attributes (`delta.agentcodec_role`, `delta.agentcodec_call_id` on OpenAI / Anthropic; `message.agentcodec_role`, `message.agentcodec_call_id` on Ollama). Default is `False` so the shim looks identical to the native SDK — answer + thinking only. `role="thinking"` always routes to the provider's native reasoning channel (`reasoning_content` on OpenAI, `thinking_delta` content_block on Anthropic, `message.thinking` on Ollama).
 
