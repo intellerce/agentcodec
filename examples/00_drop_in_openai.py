@@ -146,6 +146,12 @@ def layer_3_full_module():
     client = OpenAI(
         api_key=API_KEY, base_url=BASE_URL, reliability=mod,
     )
+    # `model=` is required by the OpenAI SDK signature (this is a drop-in
+    # wrapper), but with a full ReliabilityModule injected it does NOT pick
+    # the channel models — the module's own `models=[MODEL_A, MODEL_B]` above
+    # drives the calls. Here `model` is inert: it's only stamped onto
+    # `resp.model` as a label. (It *does* matter in passthrough / preset-string
+    # layers, which is why every layer keeps the same call shape.)
     resp = client.chat.completions.create(
         model=MODEL_A,
         messages=[

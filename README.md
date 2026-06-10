@@ -123,7 +123,7 @@ pip install 'git+https://github.com/intellerce/agentcodec.git@v0.3.0'
 
 Python ≥ 3.10. Local model experiments need [Ollama](https://ollama.com) or a vLLM/SGLang endpoint. Cloud experiments need provider API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.). A `.env` is loaded automatically by the benchmark runner; the library facade reads keys directly from `os.environ`.
 
-For SemKNN routing you additionally need a SemKNN backend reachable via HTTPS — the public package ships only the client. See [§privacy & data flow](#privacy--data-flow) and [COMMERCIAL.md](./COMMERCIAL.md) for hosted / self-host options.
+For SemKNN routing you additionally need a SemKNN backend reachable via HTTPS — the public package ships only the client. It defaults to the public hosted endpoint `https://agentcodec.intellerce.com`; override it with the `AGENTCODEC_SEMKNN_SERVER_URL` env var (or `router.server_url` in YAML) to point at your own backend. See [§privacy & data flow](#privacy--data-flow) and [COMMERCIAL.md](./COMMERCIAL.md) for hosted / self-host options.
 
 ---
 
@@ -1211,15 +1211,17 @@ Every technique below is dispatched by `agentcodec.dispatch.dispatch()` and shar
 | Ours | HARQ (ARQ retry / combine) | `harq_cc`, `harq_ir` | 2 |
 | Ours | Turbo decoding | `turbo` | 1 |
 | Ours | Fountain (rateless) | `fountain`, `fountain_soft` | 2 |
-| Ours | FEC (forward error correction) | `fec_0.75`, `fec_0.50`, `fec_0.33` | 3 |
-| Ours | Diversity combining | `diversity_sc`, `diversity_mrc`, `diversity_egc`, `diversity_sc_N`, `diversity_mrc_discrete_N`, `diversity_spatial`, `diversity_frequency`, `diversity_time`, `diversity_mrc_soft`, `diversity_mrc_discrete_N_soft` | 10 |
+| Ours | FEC (forward error correction) | `fec_0.75`, `fec_0.50`, `fec_0.33`, `fec_0.25` | 4 |
+| Ours | Diversity combining | `diversity_sc`, `diversity_mrc`, `diversity_egc`, `diversity_sc_N`, `diversity_mrc_discrete_N`, `diversity_spatial`, `diversity_frequency`, `diversity_time`, `diversity_mrc_soft`, `diversity_mrc_discrete_N_soft` | 9¹ |
 | Ours | ACM routing (adaptive coding/modulation) | `acm`, `acm_soft`, `acm_learned` | 3 |
 | Prior | Baselines | `self_consistency`, `self_refine`, `chain_of_verification`, `best_of_n`, `weighted_bon`, `cisc`, `mixture_of_agents` | 7 |
 | | **Reliability techniques** | | **28** |
 | | **+ uncoded `baseline` reference** | | **1** |
-| | **Dispatchable total** | | **29** |
+| | **Dispatchable total** | | **30** |
 
-Communication-theoretic subtotal: **21** across the six families. Prior-method baselines: **7**. That's **28 reliability techniques**; the uncoded `baseline` (single pass, no redundancy) is the reference they're all measured against, which brings the dispatch enum to **29** entries.
+¹ `diversity_spatial` is behaviorally identical to `diversity_mrc` (both = MRC combining over multiple model channels), so it's dispatchable but not counted as a distinct technique. The diversity family is really two independent axes: **what varies** (spatial = different models, frequency = different prompts, time = different temperatures) × **how branches are combined** (SC = pick best, MRC = quality-weighted synthesis, EGC = equal-weight) — any source can pair with any combiner.
+
+Communication-theoretic subtotal: **21** across the six families. Prior-method baselines: **7**. That's **28 reliability techniques**; the uncoded `baseline` (single pass, no redundancy) is the reference they're all measured against, which — plus the `diversity_spatial` alias — brings the dispatch enum to **30** entries.
 
 > **Routers live at the strategy layer, not in this list — but they're still techniques.** In communication theory, adaptive coding-modulation (ACM) *is* a technique; it's one of our six families. The library simply realizes ACM at **two layers**: the self-contained `acm` / `acm_soft` / `acm_learned` entries are dispatchable *leaf* techniques (probe difficulty → dispatch in-band) and so live in `KNOWN_TECHNIQUES`, while the `semknn` / `acm_table` / `acm_linear` *routers* — SemKNN being the flagship cost-aware one that delivers the ~56% number — **orchestrate the other techniques** and so are configured via `strategy.type` (see [§Strategies: fixed vs routed](#strategies-fixed-vs-routed) and the [router table](#routers-strategy-layer) below) rather than dispatched by name. They're techniques in the comm-theory sense; they just aren't *leaf* entries in the dispatch catalog, which is why the count of **29 dispatchable entries** doesn't include them.
 
@@ -1243,7 +1245,7 @@ SemKNN is the recommended router — see [§SemKNN](#semknn--the-recommended-rou
 | `harq_ir` | Hybrid ARQ Incremental Redundancy — retry with critic feedback. | `max_rounds` (5) |
 | `turbo` | Iterative SISO decoding — generator + critic exchange extrinsic info. | `max_iterations` (5) |
 | `fountain` | Rateless: keep generating samples until the judge is satisfied. | `max_samples` (8) |
-| `fec_0.75`, `fec_0.50`, `fec_0.33` | Forward error correction at three code rates. | `code_rate` (from name) |
+| `fec_0.75`, `fec_0.50`, `fec_0.33`, `fec_0.25` | Forward error correction at four code rates (1/2/3/4 parity calls). | `code_rate` (from name) |
 | `diversity_sc` | Selection Combining — pick the highest-scored branch. | (one branch per channel) |
 | `diversity_mrc` | Maximal Ratio Combining — quality-weighted synthesis. | (one branch per channel) |
 | `diversity_egc` | Equal Gain Combining — equal-weight consensus. | — |

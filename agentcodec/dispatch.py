@@ -347,12 +347,15 @@ KNOWN_TECHNIQUES: tuple[str, ...] = (
     "best_of_n", "weighted_bon", "cisc", "mixture_of_agents",
     "diversity_sc", "diversity_mrc", "diversity_egc",
     "diversity_sc_N", "diversity_mrc_discrete_N",
-    "diversity_spatial", "diversity_frequency", "diversity_time",
+    # NOTE: "diversity_spatial" is intentionally omitted — it's an alias for
+    # diversity_mrc (same MRC combining; see dispatch branch above) and is not
+    # counted as a distinct public technique. It still dispatches correctly.
+    "diversity_frequency", "diversity_time",
     "diversity_mrc_soft", "diversity_mrc_discrete_N_soft",
     "harq_cc", "harq_ir",
     "turbo",
     "fountain", "fountain_soft",
-    "fec_0.75", "fec_0.50", "fec_0.33",
+    "fec_0.75", "fec_0.50", "fec_0.33", "fec_0.25",
     "acm", "acm_soft", "acm_learned",
 )
 
@@ -417,6 +420,7 @@ _ASTREAM_TECHNIQUES: frozenset[str] = frozenset({
     "fec_0.75",
     "fec_0.50",
     "fec_0.33",
+    "fec_0.25",
     "diversity_mrc_soft",
     "diversity_mrc_discrete_N_soft",
     "acm",
