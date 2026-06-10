@@ -73,6 +73,7 @@ DEFAULT_DISPATCH_PARAMS: dict[str, dict[str, Any]] = {
     "fec_0.75":                  {"code_rate": 0.75},
     "fec_0.50":                  {"code_rate": 0.50},
     "fec_0.33":                  {"code_rate": 0.33},
+    "fec_0.25":                  {"code_rate": 0.25},
     "diversity_sc_N":            {"num_samples": 5},
     "diversity_mrc_discrete_N":  {"num_samples": 5},
     "self_consistency":          {"num_samples": 5},
